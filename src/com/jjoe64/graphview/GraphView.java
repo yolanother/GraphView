@@ -2,6 +2,7 @@ package com.jjoe64.graphview;
 
 import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import android.content.Context;
@@ -28,10 +29,27 @@ import com.jjoe64.graphview.compatible.ScaleGestureDetector;
  * http://www.gnu.org/licenses/lgpl.html
  */
 abstract public class GraphView extends LinearLayout {
-	static final private class GraphViewConfig {
-		static final float BORDER = 20;
-		static final float VERTICAL_LABEL_WIDTH = 100;
-		static final float HORIZONTAL_LABEL_HEIGHT = 80;
+	final public static class GraphViewConfig {
+		float BORDER = 20;
+		float VERTICAL_LABEL_WIDTH = 100;
+		float HORIZONTAL_LABEL_HEIGHT = 80;
+		boolean SHOW_TITLE = true;
+		
+		public void setBorder(float border) {
+			BORDER = Math.min(0, border);
+		}
+		
+		public void setVerticalLabelWidth(float width) {
+			VERTICAL_LABEL_WIDTH = Math.min(0, width);
+		}
+		
+		public void setHorizontalLabelHeight(float height) {
+			HORIZONTAL_LABEL_HEIGHT = Math.min(0, height);
+		}
+		
+		public void setShowTitle(boolean showTitle) {
+			SHOW_TITLE = showTitle;
+		}
 	}
 
 	private class GraphViewContentView extends View {
@@ -57,7 +75,7 @@ abstract public class GraphView extends LinearLayout {
 			// normal
 			paint.setStrokeWidth(0);
 
-			float border = GraphViewConfig.BORDER;
+			float border = mGraphViewConfig.BORDER;
 			float horstart = 0;
 			float height = getHeight();
 			float width = getWidth() - 1;
@@ -102,7 +120,9 @@ abstract public class GraphView extends LinearLayout {
 			}
 
 			paint.setTextAlign(Align.CENTER);
-			canvas.drawText(title, (graphwidth / 2) + horstart, border - 4, paint);
+			if(mGraphViewConfig.SHOW_TITLE) {
+				canvas.drawText(title, (graphwidth / 2) + horstart, border - 4, paint);
+			}
 
 			if (maxY != minY) {
 				paint.setStrokeCap(Paint.Cap.ROUND);
@@ -212,20 +232,40 @@ abstract public class GraphView extends LinearLayout {
 	static public class GraphViewSeries {
 		final String description;
 		final GraphViewStyle style;
-		final GraphViewData[] values;
+		final List<GraphViewData> values;
 		public GraphViewSeries(GraphViewData[] values) {
 			description = null;
 			style = new GraphViewStyle();
-			this.values = values;
+			this.values = new ArrayList<GraphViewData>();
+			for(GraphViewData data : values) {
+				this.values.add(data);
+			}
 		}
-		public GraphViewSeries(String description, GraphViewStyle style, GraphViewData[] values) {
+		
+		public GraphViewSeries(String description, GraphViewStyle style) {
 			super();
 			this.description = description;
 			if (style == null) {
 				style = new GraphViewStyle();
 			}
 			this.style = style;
-			this.values = values;
+			this.values = new ArrayList<GraphViewData>();
+		}
+		
+		public GraphViewSeries(String description, GraphViewStyle style, GraphViewData[] values) {
+			this(description, style);
+			for(GraphViewData data : values) {
+				this.values.add(data);
+			}
+		}
+		
+		public GraphViewSeries(String description, GraphViewStyle style, Collection<GraphViewData> values) {
+			this(description, style);
+			this.values.addAll(values);
+		}
+		
+		public void addData(GraphViewData data) {
+			values.add(data);
 		}
 	}
 
@@ -250,7 +290,7 @@ abstract public class GraphView extends LinearLayout {
 			// normal
 			paint.setStrokeWidth(0);
 
-			float border = GraphViewConfig.BORDER;
+			float border = mGraphViewConfig.BORDER;
 			float height = getHeight();
 			float graphheight = height - (2 * border);
 
@@ -287,6 +327,7 @@ abstract public class GraphView extends LinearLayout {
 	private boolean manualYAxis;
 	private double manualMaxYValue;
 	private double manualMinYValue;
+	private GraphViewConfig mGraphViewConfig = new GraphViewConfig();
 
 	/**
 	 *
@@ -310,31 +351,39 @@ abstract public class GraphView extends LinearLayout {
 		addView(new GraphViewContentView(context), new LayoutParams(LayoutParams.FILL_PARENT, LayoutParams.FILL_PARENT, 1));
 	}
 
-	private GraphViewData[] _values(int idxSeries) {
-		GraphViewData[] values = graphSeries.get(idxSeries).values;
+	private List<GraphViewData> _values(int idxSeries) {
+		List<GraphViewData> values = graphSeries.get(idxSeries).values;
 		if (viewportStart == 0 && viewportSize == 0) {
 			// all data
 			return values;
 		} else {
 			// viewport
 			List<GraphViewData> listData = new ArrayList<GraphViewData>();
-			for (int i=0; i<values.length; i++) {
-				if (values[i].valueX >= viewportStart) {
-					if (values[i].valueX > viewportStart+viewportSize) {
-						listData.add(values[i]); // one more for nice scrolling
+			for (int i=0; i<values.size(); i++) {
+				if (values.get(i).valueX >= viewportStart) {
+					if (values.get(i).valueX > viewportStart+viewportSize) {
+						listData.add(values.get(i)); // one more for nice scrolling
 						break;
 					} else {
-						listData.add(values[i]);
+						listData.add(values.get(i));
 					}
 				} else {
 					if (listData.isEmpty()) {
-						listData.add(values[i]);
+						listData.add(values.get(i));
 					}
-					listData.set(0, values[i]); // one before, for nice scrolling
+					listData.set(0, values.get(i)); // one before, for nice scrolling
 				}
 			}
-			return listData.toArray(new GraphViewData[listData.size()]);
+			return listData;
 		}
+	}
+	
+	public void setGraphViewConfig(GraphViewConfig config) {
+		mGraphViewConfig = config;
+	}
+	
+	public GraphViewConfig getGraphViewConfig() {
+		return mGraphViewConfig;
 	}
 
 	public void addSeries(GraphViewSeries series) {
@@ -372,7 +421,7 @@ abstract public class GraphView extends LinearLayout {
 			lTop = height/2 - legendHeight/2;
 			break;
 		default:
-			lTop = height - GraphViewConfig.BORDER - legendHeight -10;
+			lTop = height - mGraphViewConfig.BORDER - legendHeight -10;
 		}
 		float lRight = lLeft+legendWidth;
 		float lBottom = lTop+legendHeight;
@@ -389,7 +438,7 @@ abstract public class GraphView extends LinearLayout {
 		}
 	}
 
-	abstract public void drawSeries(Canvas canvas, GraphViewData[] values, float graphwidth, float graphheight, float border, double minX, double minY, double diffX, double diffY, float horstart);
+	abstract public void drawSeries(Canvas canvas, List<GraphViewData> values, float graphwidth, float graphheight, float border, double minX, double minY, double diffX, double diffY, float horstart);
 
 	/**
 	 * formats the label
@@ -419,7 +468,10 @@ abstract public class GraphView extends LinearLayout {
 	}
 
 	private String[] generateHorlabels(float graphwidth) {
-		int numLabels = (int) (graphwidth/GraphViewConfig.VERTICAL_LABEL_WIDTH);
+		int numLabels = (int) (graphwidth/mGraphViewConfig.VERTICAL_LABEL_WIDTH);
+		if(mGraphViewConfig.VERTICAL_LABEL_WIDTH == 0) {
+			numLabels = -1;
+		}
 		String[] labels = new String[numLabels+1];
 		double min = getMinX(false);
 		double max = getMaxX(false);
@@ -430,7 +482,10 @@ abstract public class GraphView extends LinearLayout {
 	}
 
 	synchronized private String[] generateVerlabels(float graphheight) {
-		int numLabels = (int) (graphheight/GraphViewConfig.HORIZONTAL_LABEL_HEIGHT);
+		int numLabels = (int) (graphheight/mGraphViewConfig.HORIZONTAL_LABEL_HEIGHT);
+		if(mGraphViewConfig.HORIZONTAL_LABEL_HEIGHT == 0) {
+			numLabels = -1;
+		}
 		String[] labels = new String[numLabels+1];
 		double min = getMinY();
 		double max = getMaxY();
@@ -465,11 +520,13 @@ abstract public class GraphView extends LinearLayout {
 			double highest = 0;
 			if (graphSeries.size() > 0)
 			{
-				GraphViewData[] values = graphSeries.get(0).values;
-				highest = values[values.length-1].valueX;
-				for (int i=1; i<graphSeries.size(); i++) {
-					values = graphSeries.get(i).values;
-					highest = Math.max(highest, values[values.length-1].valueX);
+				List<GraphViewData> values = graphSeries.get(0).values;
+				if(values.size() >= 1) {
+					highest = values.get(values.size()-1).valueX;
+					for (int i=1; i<graphSeries.size(); i++) {
+						values = graphSeries.get(i).values;
+						highest = Math.max(highest, values.get(values.size()-1).valueX);
+					}
 				}
 			}
 			return highest;
@@ -488,10 +545,10 @@ abstract public class GraphView extends LinearLayout {
 		} else {
 			largest = Integer.MIN_VALUE;
 			for (int i=0; i<graphSeries.size(); i++) {
-				GraphViewData[] values = _values(i);
-				for (int ii=0; ii<values.length; ii++)
-					if (values[ii].valueY > largest)
-						largest = values[ii].valueY;
+				final List<GraphViewData> values = _values(i);
+				for (GraphViewData value : values)
+					if (value.valueY > largest)
+						largest = value.valueY;
 			}
 		}
 		return largest;
@@ -514,11 +571,15 @@ abstract public class GraphView extends LinearLayout {
 			double lowest = 0;
 			if (graphSeries.size() > 0)
 			{
-				GraphViewData[] values = graphSeries.get(0).values;
-				lowest = values[0].valueX;
-				for (int i=1; i<graphSeries.size(); i++) {
-					values = graphSeries.get(i).values;
-					lowest = Math.min(lowest, values[0].valueX);
+				List<GraphViewData> values = graphSeries.get(0).values;
+				if(values.size() >= 1) {
+					lowest = values.get(0).valueX;
+					for (int i=1; i<graphSeries.size(); i++) {
+						values = graphSeries.get(i).values;
+						if(values.size() >= 1) {
+							lowest = Math.min(lowest, values.get(0).valueX);
+						}
+					}
 				}
 			}
 			return lowest;
@@ -537,10 +598,10 @@ abstract public class GraphView extends LinearLayout {
 		} else {
 			smallest = Integer.MAX_VALUE;
 			for (int i=0; i<graphSeries.size(); i++) {
-				GraphViewData[] values = _values(i);
-				for (int ii=0; ii<values.length; ii++)
-					if (values[ii].valueY < smallest)
-						smallest = values[ii].valueY;
+				final List<GraphViewData> values = _values(i);
+				for (GraphViewData value : values)
+					if (value.valueY < smallest)
+						smallest = value.valueY;
 			}
 		}
 		return smallest;
@@ -664,5 +725,9 @@ abstract public class GraphView extends LinearLayout {
 	public void setViewPort(double start, double size) {
 		viewportStart = start;
 		viewportSize = size;
+		viewVerLabels.invalidate();
+
+		horlabels = null;
+		verlabels = null;
 	}
 }
